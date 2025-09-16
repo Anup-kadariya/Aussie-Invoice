@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import type { Client } from '../types';
 import { X } from 'lucide-react';
@@ -7,9 +6,10 @@ interface ClientManagerProps {
     client: Client | null;
     onSave: (client: Client) => void;
     onClose: () => void;
+    onDelete: (clientId: string) => void;
 }
 
-const ClientManager: React.FC<ClientManagerProps> = ({ client, onSave, onClose }) => {
+const ClientManager: React.FC<ClientManagerProps> = ({ client, onSave, onClose, onDelete }) => {
     const [formData, setFormData] = useState<Omit<Client, 'id'>>({
         name: '',
         abn: '',
@@ -34,6 +34,12 @@ const ClientManager: React.FC<ClientManagerProps> = ({ client, onSave, onClose }
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         onSave({ ...formData, id: client?.id || '' });
+    };
+
+    const handleDelete = () => {
+        if (client?.id) {
+            onDelete(client.id);
+        }
     };
 
     return (
@@ -64,9 +70,24 @@ const ClientManager: React.FC<ClientManagerProps> = ({ client, onSave, onClose }
                         <label htmlFor="address" className="block text-sm font-medium text-gray-700">Address</label>
                         <textarea name="address" id="address" value={formData.address} onChange={handleChange} rows={3} required className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary"></textarea>
                     </div>
-                    <div className="flex justify-end gap-4 pt-4">
-                        <button type="button" onClick={onClose} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300">Cancel</button>
-                        <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-blue-600">Save Client</button>
+                    <div className="flex justify-between items-center pt-4">
+                        <div>
+                             {client && (
+                                <button
+                                    type="button"
+                                    onClick={handleDelete}
+                                    className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                                >
+                                    Delete Client
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex justify-end gap-4">
+                            <button type="button" onClick={onClose} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300">Cancel</button>
+                            <button type="submit" className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-blue-600">
+                                {client ? 'Save Changes' : 'Save Client'}
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>

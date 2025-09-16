@@ -65,3 +65,10 @@ export interface Invoice {
         showEmail: boolean;
     };
 }
+
+export interface AuthUser {
+    name: string;
+    email: string;
+    // NOTE: Storing plain text password in local storage is insecure and for demonstration purposes only.
+    password?: string;
+}

@@ -2,24 +2,28 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import type { Client, Invoice, InvoiceItem, Template } from './types';
+import type { Client, Invoice, AuthUser } from './types';
 import { TemplateId } from './types';
 import Header from './components/Header';
 import ClientManager from './components/ClientManager';
 import InvoiceForm from './components/InvoiceForm';
 import InvoicePreview from './components/InvoicePreview';
+import LoginModal from './components/LoginModal';
+import SignupModal from './components/SignupModal';
 import { Plus, Download, Send, Eye } from 'lucide-react';
 
 const GST_RATE = 0.10;
 
 const App: React.FC = () => {
+    // Auth States
+    const [authUser, setAuthUser] = useLocalStorage<AuthUser | null>('authUser', null);
+    const [authModal, setAuthModal] = useState<'login' | 'signup' | null>(null);
+
     const [clients, setClients] = useLocalStorage<Client[]>('clients', []);
     const [activeClient, setActiveClient] = useState<Client | null>(null);
     const [showClientManager, setShowClientManager] = useState<boolean>(false);
     const [showAdModal, setShowAdModal] = useState<boolean>(false);
-    const [invoice, setInvoice] = useState<Invoice>(getNewInvoice());
-    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-
+    
     function getNewInvoice(): Invoice {
         return {
             id: `INV-${Date.now()}`,
@@ -36,11 +40,11 @@ const App: React.FC = () => {
                 payId: 'your.email@example.com'
             },
             user: {
-                name: 'Anup Kadariya',
+                name: authUser?.name || 'Anup Kadariya',
                 abn: '97106120051',
                 address: 'U12 5 Belle Place\nMilner, NT 0810',
                 phone: '0410641209',
-                email: 'kadariya.anup47@gmail.com',
+                email: authUser?.email || 'kadariya.anup47@gmail.com',
             },
             template: TemplateId.SIMPLE,
             paymentDetailsType: 'fullBankDetails',
@@ -58,6 +62,9 @@ const App: React.FC = () => {
             }
         };
     }
+    
+    const [invoice, setInvoice] = useState<Invoice>(getNewInvoice());
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
     const handleClientSelect = useCallback((clientId: string) => {
         const client = clients.find(c => c.id === clientId);
@@ -101,6 +108,23 @@ const App: React.FC = () => {
         setInvoice(prev => ({...prev, client: savedClient}));
         setActiveClient(savedClient);
         setShowClientManager(false);
+    };
+
+    const handleDeleteClient = (clientId: string) => {
+        const clientToDelete = clients.find(c => c.id === clientId);
+        if (!clientToDelete) return;
+
+        if (window.confirm(`Are you sure you want to delete ${clientToDelete.name}? This action cannot be undone.`)) {
+            const updatedClients = clients.filter(c => c.id !== clientId);
+            setClients(updatedClients);
+
+            if (invoice.client?.id === clientId) {
+                setInvoice(prev => ({ ...prev, client: null }));
+                setActiveClient(null);
+            }
+            setShowClientManager(false);
+            setActiveClient(null);
+        }
     };
 
     const handleShowAd = (callback: () => void) => {
@@ -171,6 +195,57 @@ const App: React.FC = () => {
             window.location.href = `mailto:${invoice.client.email}?subject=${subject}&body=${body}`;
         });
     };
+
+    const handleSignup = (name: string, email: string, password: string) => {
+        const users: AuthUser[] = JSON.parse(localStorage.getItem('users') || '[]');
+        if (users.some(user => user.email === email)) {
+            alert('An account with this email already exists.');
+            return;
+        }
+        
+        const newUser: AuthUser = { name, email, password };
+        users.push(newUser);
+        localStorage.setItem('users', JSON.stringify(users));
+
+        const activeUser = { name, email };
+        setAuthUser(activeUser);
+        setAuthModal(null);
+        
+        setInvoice(prev => ({
+            ...prev,
+            user: {
+                ...prev.user,
+                name: activeUser.name,
+                email: activeUser.email,
+            }
+        }));
+    };
+
+    const handleLogin = (email: string, password: string) => {
+        const users: AuthUser[] = JSON.parse(localStorage.getItem('users') || '[]');
+        const foundUser = users.find(user => user.email === email && user.password === password);
+
+        if (foundUser) {
+            const activeUser = { name: foundUser.name, email: foundUser.email };
+            setAuthUser(activeUser);
+            setAuthModal(null);
+
+             setInvoice(prev => ({
+                ...prev,
+                user: {
+                    ...prev.user,
+                    name: activeUser.name,
+                    email: activeUser.email,
+                }
+            }));
+        } else {
+            alert('Invalid email or password.');
+        }
+    };
+    
+    const handleLogout = () => {
+        setAuthUser(null);
+    };
     
     const subTotal = useMemo(() => {
         return invoice.items.reduce((acc, item) => acc + (item.quantity * item.rate), 0);
@@ -191,7 +266,12 @@ const App: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 text-gray-800">
-            <Header />
+            <Header 
+                authUser={authUser}
+                onLoginClick={() => setAuthModal('login')}
+                onSignupClick={() => setAuthModal('signup')}
+                onLogout={handleLogout}
+            />
             <main className="p-4 sm:p-6 lg:p-8">
                 <div className="max-w-7xl mx-auto">
                     <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -241,6 +321,7 @@ const App: React.FC = () => {
                 <ClientManager
                     client={activeClient}
                     onSave={handleSaveClient}
+                    onDelete={handleDeleteClient}
                     onClose={() => {
                         setShowClientManager(false);
                         setActiveClient(null);
@@ -256,6 +337,21 @@ const App: React.FC = () => {
                         <div className="w-16 h-16 border-4 border-dashed border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
                     </div>
                 </div>
+            )}
+
+            {authModal === 'login' && (
+                <LoginModal
+                    onLogin={handleLogin}
+                    onClose={() => setAuthModal(null)}
+                    onSwitchToSignup={() => setAuthModal('signup')}
+                />
+            )}
+            {authModal === 'signup' && (
+                <SignupModal
+                    onSignup={handleSignup}
+                    onClose={() => setAuthModal(null)}
+                    onSwitchToLogin={() => setAuthModal('login')}
+                />
             )}
         </div>
     );
